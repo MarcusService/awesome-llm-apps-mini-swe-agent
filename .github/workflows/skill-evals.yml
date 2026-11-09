@@ -1,0 +1,95 @@
+name: skill-evals
+
+on:
+  pull_request:
+    paths:
+      - "agent_skills/**"
+  push:
+    branches: [main]
+    paths:
+      - "agent_skills/**"
+
+
+jobs:
+  evals:
+    name: Deterministic script evals
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+      - name: Verify Git is available
+        run: git --version
+      - name: Configure Git identity for eval fixtures
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Run deterministic skill evals
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(agent_skills/evals/*/test_*.py)
+          if (( ${#tests[@]} == 0 )); then
+            echo "No test_*.py files found under agent_skills/evals/*/" >&2
+            exit 1
+          fi
+          for test_file in "${tests[@]}"; do
+            echo "Running ${test_file}"
+            python3 "${test_file}"
+          done
+
+  lint:
+    name: Strict skill lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+      - name: Run strict skill lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          skill_files=(agent_skills/*/SKILL.md)
+          if (( ${#skill_files[@]} == 0 )); then
+            echo "No SKILL.md files found under agent_skills/*/" >&2
+            exit 1
+          fi
+          for skill_file in "${skill_files[@]}"; do
+            skill_dir="$(dirname "${skill_file}")"
+            echo "Linting ${skill_dir}"
+            python3 agent_skills/evals/tools/skill_lint.py "${skill_dir}" --strict
+          done
+
+  security-scan:
+    name: Skill security scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+      - name: Scan agent skills for security issues
+        run: python3 agent_skills/evals/tools/skill_scanner.py agent_skills
+
+  trigger-routing:
+    name: Trigger and routing evals
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+      - name: Run trigger and routing evals
+        run: python3 agent_skills/evals/tools/run_trigger_evals.py
